@@ -5,7 +5,6 @@
 
 import json
 import os
-import sqlite3
 import time
 import uuid
 from typing import Dict, List, Any, Optional, Union
@@ -87,11 +86,6 @@ class InClassChatSvc:
         self.max_context_length = 4000  # 最大上下文长度
         self.max_transcript_segments = 5  # 最多包含的转录片段数
         self.max_summary_segments = 3    # 最多包含的总结片段数
-        
-        # 数据库配置
-        self.db_path = "summaries.db"
-        self.transcript_table = "transcripts"  # 假设存在转录表
-        self.summaries_table = "summaries"    # 总结表已存在
     
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -370,21 +364,23 @@ class InClassChatSvc:
         except Exception as e:
             raise Exception(f"AI问答服务调用失败: {str(e)}")
     
-    def _build_context(self, time_window_minutes: int) -> ChatContext:
+    def _build_context(self, recent_transcripts: Optional[List[str]] = None, 
+                      recent_summaries: Optional[List[str]] = None) -> ChatContext:
         """
         构建问答上下文
         
         Args:
-            time_window_minutes: 时间窗口（分钟）
+            recent_transcripts: 最近的转录数据列表
+            recent_summaries: 最近的总结数据列表
             
         Returns:
             ChatContext: 上下文对象
         """
         # 获取最近的转录片段
-        recent_transcripts = self._get_recent_transcripts(time_window_minutes)
+        recent_transcripts = self._get_recent_transcripts(recent_transcripts)
         
         # 获取最近的阶段性总结
-        partial_summaries = self._get_recent_summaries(time_window_minutes)
+        partial_summaries = self._get_recent_summaries(recent_summaries)
         
         # 获取课程画像
         course_profile = self._load_course_profile()
@@ -402,92 +398,33 @@ class InClassChatSvc:
             total_context_length=total_length
         )
     
-    def _get_recent_transcripts(self, time_window_minutes: int) -> List[str]:
+    def _get_recent_transcripts(self, recent_transcripts: Optional[List[str]] = None) -> List[str]:
         """
-        获取最近的转录片段
+        获取最近的转录数据（从API参数提供）
         
         Args:
-            time_window_minutes: 时间窗口（分钟）
+            recent_transcripts: 通过API参数提供的转录数据列表
             
         Returns:
             List[str]: 转录文本列表
         """
-        transcripts = []
-        
-        try:
-            # 连接数据库
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # 创建转录表（如果不存在）- 实际应用中应该由STT服务创建
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS transcripts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    text_content TEXT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # 计算时间窗口
-            cutoff_time = datetime.now() - timedelta(minutes=time_window_minutes)
-            
-            # 查询最近的转录记录
-            cursor.execute('''
-                SELECT text_content FROM transcripts 
-                WHERE timestamp >= ? 
-                ORDER BY timestamp DESC 
-                LIMIT ?
-            ''', (cutoff_time.isoformat(), self.max_transcript_segments))
-            
-            results = cursor.fetchall()
-            transcripts = [row[0] for row in results]
-            
-            conn.close()
-            
-        except sqlite3.Error as e:
-            print(f"获取转录数据时数据库错误: {e}")
-            # 返回空列表，让服务继续使用其他上下文
-        
-        return transcripts
+        if recent_transcripts:
+            return recent_transcripts[:self.max_transcript_segments]
+        return []
     
-    def _get_recent_summaries(self, time_window_minutes: int) -> List[str]:
+    def _get_recent_summaries(self, recent_summaries: Optional[List[str]] = None) -> List[str]:
         """
-        获取最近的阶段性总结
+        获取最近的阶段性总结（从API参数提供）
         
         Args:
-            time_window_minutes: 时间窗口（分钟）
+            recent_summaries: 通过API参数提供的总结数据列表
             
         Returns:
             List[str]: 总结文本列表（Markdown格式）
         """
-        summaries = []
-        
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # 计算时间窗口
-            cutoff_time = datetime.now() - timedelta(minutes=time_window_minutes)
-            
-            # 查询最近的总结记录
-            cursor.execute('''
-                SELECT markdown_content FROM summaries 
-                WHERE timestamp >= ? 
-                ORDER BY timestamp DESC 
-                LIMIT ?
-            ''', (cutoff_time.isoformat(), self.max_summary_segments))
-            
-            results = cursor.fetchall()
-            summaries = [row[0] for row in results]
-            
-            conn.close()
-            
-        except sqlite3.Error as e:
-            print(f"获取总结数据时数据库错误: {e}")
-        
-        return summaries
+        if recent_summaries:
+            return recent_summaries[:self.max_summary_segments]
+        return []
     
     def _load_course_profile(self) -> Dict[str, Any]:
         """

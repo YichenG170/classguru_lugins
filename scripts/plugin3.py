@@ -140,16 +140,8 @@ class PartialSummSvc:
             return result
             
         elif action == "get_recent_summaries":
-            # 获取最近的总结
-            session_id = intent.get("session_id")
-            limit = intent.get("limit", 10)
-            time_window = intent.get("time_window_hours", 24)
-            
-            summaries = self._get_recent_summaries(session_id, limit, time_window)
-            
-            result = self._format_summaries_list(summaries, intent)
-            
-            return result
+            # 返回错误信息，因为数据库功能已被删除
+            raise ValueError("已不支持get_recent_summaries操作，请使用API参数传递历史数据")
             
         else:
             raise ValueError(f"不支持的操作: {action}")
@@ -212,52 +204,6 @@ class PartialSummSvc:
             }
         
         return result
-    
-    def _get_recent_summaries(self, session_id: Optional[str], limit: int, time_window_hours: int) -> List[Dict[str, Any]]:
-        """获取最近的总结记录"""
-        summaries = []
-        
-        try:
-            conn = sqlite3.connect("summaries.db")
-            cursor = conn.cursor()
-            
-            # 计算时间窗口
-            cutoff_time = datetime.now() - timedelta(hours=time_window_hours)
-            
-            if session_id:
-                cursor.execute('''
-                    SELECT session_id, timestamp, markdown_content, course_tags, word_count
-                    FROM summaries 
-                    WHERE session_id = ? AND timestamp >= ?
-                    ORDER BY timestamp DESC 
-                    LIMIT ?
-                ''', (session_id, cutoff_time.isoformat(), limit))
-            else:
-                cursor.execute('''
-                    SELECT session_id, timestamp, markdown_content, course_tags, word_count
-                    FROM summaries 
-                    WHERE timestamp >= ?
-                    ORDER BY timestamp DESC 
-                    LIMIT ?
-                ''', (cutoff_time.isoformat(), limit))
-            
-            results = cursor.fetchall()
-            
-            for row in results:
-                summaries.append({
-                    "session_id": row[0],
-                    "timestamp": row[1],
-                    "markdown_content": row[2],
-                    "course_tags": json.loads(row[3]) if row[3] else [],
-                    "word_count": row[4]
-                })
-            
-            conn.close()
-            
-        except Exception as e:
-            print(f"获取总结记录失败: {e}")
-        
-        return summaries
     
     def _build_response(self, request_id: str, result: Dict[str, Any], 
                        status_code: int, description: str) -> Dict[str, Any]:
@@ -394,43 +340,6 @@ class PartialSummSvc:
         english_words = len(re.findall(r'[a-zA-Z]+', text))
         
         return chinese_chars + english_words
-    
-    def save_to_database(self, summary: PartialSummary, db_path: str = "summaries.db") -> None:
-        """保存总结到数据库"""
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            
-            # 创建表（如果不存在）
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS summaries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    timestamp DATETIME NOT NULL,
-                    markdown_content TEXT NOT NULL,
-                    course_tags TEXT NOT NULL,
-                    word_count INTEGER NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # 插入数据
-            cursor.execute('''
-                INSERT INTO summaries (session_id, timestamp, markdown_content, course_tags, word_count)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (
-                summary.session_id,
-                summary.timestamp.isoformat(),
-                summary.markdown_content,
-                json.dumps(summary.course_tags),
-                summary.word_count
-            ))
-            
-            conn.commit()
-            conn.close()
-            
-        except Exception as e:
-            raise Exception(f"数据库保存失败: {str(e)}")
 
 
 def main():

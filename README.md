@@ -736,39 +736,29 @@ print(response)
 
 ## 🗄️ 数据管理
 
-### SQLite数据库表结构
+### 无状态服务设计
 
-#### summaries表（阶段性总结）
-```sql
-CREATE TABLE summaries (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    timestamp DATETIME NOT NULL,
-    markdown_content TEXT NOT NULL,
-    course_tags TEXT NOT NULL,
-    word_count INTEGER NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
+为了提高系统的可扩展性和简化部署，所有插件都采用无状态设计：
 
-#### transcripts表（转录记录）
-```sql
-CREATE TABLE transcripts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    timestamp DATETIME NOT NULL,
-    text_content TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-```
+- **Plugin3 (阶段性总结服务)**: 不再保存总结历史，直接返回生成的总结结果
+- **Plugin4 (课堂对话服务)**: 通过API参数接收上下文数据（转录、总结、课程画像）
+- **数据持久化**: 由调用方负责管理数据的存储和历史记录
+
+### 优势
+
+1. **简化部署**: 无需配置数据库文件
+2. **水平扩展**: 支持多实例并发运行
+3. **状态隔离**: 避免服务间的数据冲突
+4. **灵活性**: 调用方可以选择任何存储方案
 
 ## 🚨 注意事项
 
 1. **API密钥安全**: 确保OpenAI API密钥安全存储，不要硬编码在代码中
-2. **文件权限**: 确保有读写权限访问数据库和文件
+2. **文件权限**: 确保有读写权限访问文件系统
 3. **网络连接**: Plugin2的WebSocket服务需要稳定的网络连接
 4. **内存管理**: 处理大型文档时注意内存使用
 5. **错误处理**: 每个插件都有完整的错误处理机制
+6. **数据管理**: 调用方需要自行管理数据的持久化和历史记录
 
 ## 🔍 调试和测试
 

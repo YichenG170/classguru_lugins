@@ -18,7 +18,7 @@ websockets>=15.0             # WebSocket support for real-time audio
 asyncio                      # Built-in, async programming
 
 # Data management
-sqlite3                      # Built-in, database operations
+# 注意：已移除sqlite3依赖，改为通过API参数传递数据以实现无状态服务
 
 # Audio and media processing
 pyaudio                      # Audio I/O (optional for advanced audio processing)

@@ -1219,12 +1219,11 @@ async def main():
                         "sample_rate": 16000,
                         "channels": 1
                     }
-                }
-            },
-            "expect": {
+                },
                 "include_websocket_url": True,
                 "include_config": True
-            }
+            },
+            "expect": None
         }
         
         print("=== 请求体1 (启动转录服务) ===")
@@ -1247,11 +1246,10 @@ async def main():
                 "timezone": "Asia/Shanghai"
             },
             "intent": {
-                "action": "get_status"
-            },
-            "expect": {
+                "action": "get_status",
                 "include_stats": True
-            }
+            },
+            "expect": None
         }
         
         print("\n=== 请求体2 (获取状态) ===")
@@ -1276,12 +1274,11 @@ async def main():
             "intent": {
                 "action": "transcribe_audio",
                 "audio_data": "UklGRi4kAABXQVZFZm10IBAAAAABAAEAgD4AAIA+AAABACAAAP8=",  # 示例base64音频数据
-                "language": "en"
-            },
-            "expect": {
+                "language": "en",
                 "include_metadata": True,
                 "include_technical_details": True
-            }
+            },
+            "expect": None
         }
         
         print("\n=== 请求体3 (音频转录) ===")
