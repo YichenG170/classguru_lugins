@@ -124,15 +124,124 @@ class JitterBuffer:
         return len(self.buffer)
 
 
+@dataclass
+class UserSession:
+    """用户会话数据结构"""
+    session_id: str
+    connection_id: str
+    websocket: Any
+    jitter_buffer: JitterBuffer
+    audio_queue: Queue
+    language: str = "en"
+    translate_to: Optional[str] = None
+    display_subtitles: bool = False
+    enable_translation: bool = False
+    created_at: datetime = None
+    stats: ConnectionStats = None
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        if self.stats is None:
+            self.stats = ConnectionStats()
+
+
+class ConnectionManager:
+    """管理多个WebSocket连接和会话"""
+    
+    def __init__(self, max_connections: int = 50):
+        self.max_connections = max_connections
+        self.active_sessions: Dict[str, UserSession] = {}  # session_id -> UserSession
+        self.connection_to_session: Dict[str, str] = {}    # connection_id -> session_id
+        self.websocket_to_connection: Dict[Any, str] = {}  # websocket -> connection_id
+        
+    def create_session(self, websocket, session_id: str = None, connection_id: str = None) -> UserSession:
+        """创建新会话"""
+        if len(self.active_sessions) >= self.max_connections:
+            raise Exception(f"超过最大连接数限制: {self.max_connections}")
+        
+        if session_id is None:
+            session_id = f"session_{int(time.time())}_{str(uuid.uuid4())[:8]}"
+        if connection_id is None:
+            connection_id = str(uuid.uuid4())
+        
+        # 检查会话是否已存在
+        if session_id in self.active_sessions:
+            raise Exception(f"会话ID已存在: {session_id}")
+        
+        # 创建会话
+        session = UserSession(
+            session_id=session_id,
+            connection_id=connection_id,
+            websocket=websocket,
+            jitter_buffer=JitterBuffer(),
+            audio_queue=Queue(maxsize=1000)
+        )
+        
+        # 注册映射关系
+        self.active_sessions[session_id] = session
+        self.connection_to_session[connection_id] = session_id
+        self.websocket_to_connection[websocket] = connection_id
+        
+        logger.info(f"会话创建成功: {session_id}, 连接ID: {connection_id}, 当前活跃会话数: {len(self.active_sessions)}")
+        return session
+    
+    def get_session_by_websocket(self, websocket) -> Optional[UserSession]:
+        """通过WebSocket获取会话"""
+        connection_id = self.websocket_to_connection.get(websocket)
+        if connection_id:
+            session_id = self.connection_to_session.get(connection_id)
+            if session_id:
+                return self.active_sessions.get(session_id)
+        return None
+    
+    def get_session_by_id(self, session_id: str) -> Optional[UserSession]:
+        """通过会话ID获取会话"""
+        return self.active_sessions.get(session_id)
+    
+    def remove_session(self, websocket) -> bool:
+        """移除会话"""
+        connection_id = self.websocket_to_connection.get(websocket)
+        if not connection_id:
+            return False
+        
+        session_id = self.connection_to_session.get(connection_id)
+        if not session_id:
+            return False
+        
+        # 清理所有映射关系
+        if session_id in self.active_sessions:
+            del self.active_sessions[session_id]
+        if connection_id in self.connection_to_session:
+            del self.connection_to_session[connection_id]
+        if websocket in self.websocket_to_connection:
+            del self.websocket_to_connection[websocket]
+        
+        logger.info(f"会话移除成功: {session_id}, 连接ID: {connection_id}, 当前活跃会话数: {len(self.active_sessions)}")
+        return True
+    
+    def get_active_session_count(self) -> int:
+        """获取活跃会话数"""
+        return len(self.active_sessions)
+    
+    def get_all_sessions(self) -> List[UserSession]:
+        """获取所有活跃会话"""
+        return list(self.active_sessions.values())
+
+
+
+
+
 class STTService:
     """实时转录服务"""
     
-    def __init__(self, openai_api_key: Optional[str] = None):
+    def __init__(self, openai_api_key: Optional[str] = None, max_connections: int = 50):
         """
         初始化STT服务
         
         Args:
             openai_api_key: OpenAI API密钥，如果为None则从环境变量获取
+            max_connections: 最大并发连接数
         """
         # 获取API密钥
         if openai_api_key is None:
@@ -152,17 +261,14 @@ class STTService:
         # 版本管理
         self.version = "1.0.0"
         
+        # 连接管理
+        self.connection_manager = ConnectionManager(max_connections=max_connections)
+        
         # 服务状态
         self.state = TranscriptionState.STOPPED
         self.audio_config = AudioConfig()
-        self.stats = ConnectionStats()
         
-        # 音频处理
-        self.audio_queue = Queue(maxsize=1000)
-        self.jitter_buffer = JitterBuffer()
-        
-        # WebSocket连接
-        self.websocket = None
+        # WebSocket服务器
         self.ws_server = None
         
         # 回调函数
@@ -171,16 +277,8 @@ class STTService:
         self.state_change_callbacks: List[Callable] = []
         
         # 后台任务
-        self.audio_processor_task = None
-        self.transcription_task = None
-        
-        # 控制标志
-        self.display_subtitles = False  # 字幕显示开关
-        self.enable_translation = False  # 翻译开关
-        self.translation_target_lang = "zh"  # 目标语言
-        
-        # 性能统计
-        self.frame_timestamps = deque(maxlen=100)
+        self.audio_processor_tasks: Dict[str, asyncio.Task] = {}  # session_id -> task
+        self.transcription_tasks: Dict[str, asyncio.Task] = {}    # session_id -> task
     
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -496,33 +594,317 @@ class STTService:
             self._change_state(TranscriptionState.STARTING)
             
             async def handle_client(websocket, path):
-                """处理客户端连接"""
-                self.websocket = websocket
-                logger.info(f"客户端已连接: {websocket.remote_address}")
+                """处理客户端连接（支持多连接）"""
+                session = None
+                logger.info(f"客户端尝试连接: {websocket.remote_address}")
                 
                 try:
+                    # 等待客户端发送初始化消息
+                    init_message = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+                    init_data = json.loads(init_message)
+                    
+                    # 验证初始化消息
+                    if init_data.get("type") != "init":
+                        await websocket.send(json.dumps({
+                            "type": "error",
+                            "message": "首条消息必须是初始化消息"
+                        }))
+                        return
+                    
+                    # 创建会话
+                    session_id = init_data.get("session_id")
+                    session = self.connection_manager.create_session(websocket, session_id)
+                    
+                    # 应用会话配置
+                    session.language = init_data.get("language", "en")
+                    session.translate_to = init_data.get("translate_to")
+                    session.enable_translation = bool(session.translate_to)
+                    session.display_subtitles = init_data.get("display_subtitles", True)
+                    
+                    # 发送初始化确认
+                    await websocket.send(json.dumps({
+                        "type": "init_response",
+                        "session_id": session.session_id,
+                        "connection_id": session.connection_id,
+                        "status": "connected",
+                        "server_version": self.version
+                    }))
+                    
                     self._change_state(TranscriptionState.RUNNING)
-                    await self._handle_audio_stream(websocket)
+                    
+                    # 启动会话专用的处理任务
+                    audio_task = asyncio.create_task(self._process_session_audio(session))
+                    transcription_task = asyncio.create_task(self._session_transcription_worker(session))
+                    
+                    self.audio_processor_tasks[session.session_id] = audio_task
+                    self.transcription_tasks[session.session_id] = transcription_task
+                    
+                    # 处理音频流
+                    await self._handle_session_audio_stream(session)
+                    
+                except asyncio.TimeoutError:
+                    logger.warning("客户端初始化超时")
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "初始化超时，请在30秒内发送init消息"
+                    }))
                 except ConnectionClosed:
-                    logger.info("客户端连接关闭")
+                    logger.info(f"客户端连接关闭: {session.session_id if session else 'unknown'}")
                 except Exception as e:
                     logger.error(f"处理客户端错误: {e}")
-                    self._trigger_error(f"客户端处理错误: {e}")
+                    if session:
+                        await self._send_session_error(session, f"客户端处理错误: {e}")
                 finally:
-                    self.websocket = None
+                    # 清理会话资源
+                    if session:
+                        await self._cleanup_session(session)
             
             # 启动WebSocket服务器
             self.ws_server = await websockets.serve(handle_client, host, port)
-            logger.info(f"STT服务器启动于 ws://{host}:{port}")
-            
-            # 启动音频处理任务
-            self.audio_processor_task = asyncio.create_task(self._process_audio_queue())
-            self.transcription_task = asyncio.create_task(self._transcription_worker())
+            logger.info(f"STT服务器启动于 ws://{host}:{port}，支持最多 {self.connection_manager.max_connections} 个并发连接")
             
         except Exception as e:
             self._change_state(TranscriptionState.ERROR)
             self._trigger_error(f"启动服务器失败: {e}")
             raise
+    
+    async def _handle_session_audio_stream(self, session) -> None:
+        """处理单个会话的音频流数据"""
+        sequence_number = 0
+        
+        async for message in session.websocket:
+            try:
+                if isinstance(message, str):
+                    # 处理控制消息
+                    await self._handle_session_control_message(session, json.loads(message))
+                else:
+                    # 处理音频数据
+                    timestamp = time.time()
+                    
+                    # 更新会话统计信息
+                    session.stats.bytes_received += len(message)
+                    session.stats.frames_processed += 1
+                    
+                    # 添加到会话专用的抖动缓冲区
+                    buffered_data = session.jitter_buffer.add_frame(message, sequence_number)
+                    if buffered_data:
+                        # 添加到会话专用的处理队列
+                        if not session.audio_queue.full():
+                            session.audio_queue.put((timestamp, buffered_data))
+                        else:
+                            logger.warning(f"会话 {session.session_id} 音频队列已满，丢弃帧")
+                    
+                    sequence_number += 1
+                    
+                    # 发送ACK确认
+                    await session.websocket.send(json.dumps({
+                        "type": "ack",
+                        "session_id": session.session_id,
+                        "sequence": sequence_number - 1,
+                        "timestamp": timestamp
+                    }))
+                    
+            except Exception as e:
+                logger.error(f"会话 {session.session_id} 处理音频流错误: {e}")
+                await self._send_session_error(session, f"会话音频流处理错误: {e}")
+    
+    async def _handle_session_control_message(self, session, message: Dict[str, Any]) -> None:
+        """处理会话控制消息"""
+        msg_type = message.get("type")
+        
+        if msg_type == "start_display":
+            session.display_subtitles = True
+            logger.info(f"会话 {session.session_id} 字幕显示已开启")
+            await session.websocket.send(json.dumps({
+                "type": "control_response",
+                "session_id": session.session_id,
+                "action": "start_display",
+                "status": "success"
+            }))
+        elif msg_type == "stop_display":
+            session.display_subtitles = False
+            logger.info(f"会话 {session.session_id} 字幕显示已关闭")
+            await session.websocket.send(json.dumps({
+                "type": "control_response", 
+                "session_id": session.session_id,
+                "action": "stop_display",
+                "status": "success"
+            }))
+        elif msg_type == "enable_translation":
+            session.enable_translation = message.get("enabled", False)
+            session.translate_to = message.get("target_lang", "zh")
+            logger.info(f"会话 {session.session_id} 翻译功能: {'开启' if session.enable_translation else '关闭'}")
+            await session.websocket.send(json.dumps({
+                "type": "control_response",
+                "session_id": session.session_id, 
+                "action": "enable_translation",
+                "status": "success",
+                "translation_enabled": session.enable_translation
+            }))
+        elif msg_type == "ping":
+            # 心跳检测
+            await session.websocket.send(json.dumps({
+                "type": "pong",
+                "session_id": session.session_id,
+                "timestamp": time.time()
+            }))
+    
+    async def _send_session_error(self, session, error_message: str) -> None:
+        """向特定会话发送错误消息"""
+        try:
+            await session.websocket.send(json.dumps({
+                "type": "error",
+                "session_id": session.session_id,
+                "message": error_message,
+                "timestamp": time.time()
+            }))
+        except Exception as e:
+            logger.error(f"发送错误消息失败: {e}")
+    
+    async def _process_session_audio(self, session) -> None:
+        """处理单个会话的音频队列"""
+        audio_buffer = bytearray()
+        
+        while session.session_id in self.connection_manager.active_sessions:
+            try:
+                # 从会话队列获取音频数据
+                try:
+                    timestamp, audio_data = session.audio_queue.get(timeout=0.1)
+                    
+                    if audio_data:
+                        audio_buffer.extend(audio_data)
+                        
+                        # 当缓冲区足够大时进行转录
+                        if len(audio_buffer) >= 8192:  # 约0.5秒的音频
+                            # 发送给转录处理
+                            await self._transcribe_session_audio(session, bytes(audio_buffer))
+                            audio_buffer.clear()
+                            
+                except:
+                    # 队列为空，继续等待
+                    pass
+                
+                await asyncio.sleep(0.01)  # 小延迟避免CPU占用过高
+                
+            except Exception as e:
+                logger.error(f"会话 {session.session_id} 音频队列处理错误: {e}")
+                await asyncio.sleep(0.1)
+    
+    async def _session_transcription_worker(self, session) -> None:
+        """会话转录工作线程"""
+        while session.session_id in self.connection_manager.active_sessions:
+            try:
+                # 更新会话统计信息
+                session.stats.jitter_buffer_size = session.jitter_buffer.get_buffer_size()
+                
+                await asyncio.sleep(1.0)  # 每秒更新一次统计
+                
+            except Exception as e:
+                logger.error(f"会话 {session.session_id} 转录工作线程错误: {e}")
+                await asyncio.sleep(1.0)
+    
+    async def _transcribe_session_audio(self, session, audio_data: bytes) -> None:
+        """
+        使用OpenAI为特定会话进行音频转录
+        """
+        try:
+            # 将音频数据转换为文件对象
+            import tempfile
+            
+            # 创建临时音频文件
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+                wav_header = self._create_wav_header(
+                    len(audio_data),
+                    self.audio_config.channels,
+                    self.audio_config.sample_rate,
+                    16  # 16位深度
+                )
+                temp_file.write(wav_header)
+                temp_file.write(audio_data)
+                temp_file.flush()
+                
+                # 调用OpenAI转录API
+                with open(temp_file.name, 'rb') as audio_file:
+                    if session.enable_translation and session.translate_to:
+                        # 使用翻译API直接获取翻译结果
+                        response = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: self.client.audio.translations.create(
+                                model="whisper-1",
+                                file=audio_file,
+                                response_format="verbose_json"
+                            )
+                        )
+                        translated_text = response.text
+                        original_text = None
+                    else:
+                        # 仅转录
+                        response = await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: self.client.audio.transcriptions.create(
+                                model="whisper-1",
+                                file=audio_file,
+                                language=session.language,
+                                response_format="verbose_json"
+                            )
+                        )
+                        original_text = response.text
+                        translated_text = None
+                
+                # 处理转录结果
+                if original_text or translated_text:
+                    result = TranscriptionResult(
+                        timestamp=time.time(),
+                        text=original_text or translated_text,
+                        confidence=getattr(response, 'confidence', 0.9),
+                        is_final=True,
+                        language=session.language if original_text else session.translate_to,
+                        translated_text=translated_text if original_text else None
+                    )
+                    
+                    # 发送转录结果到特定会话
+                    if session.display_subtitles:
+                        await session.websocket.send(json.dumps({
+                            "type": "transcription",
+                            "session_id": session.session_id,
+                            "timestamp": result.timestamp,
+                            "original_text": original_text,
+                            "translated_text": translated_text,
+                            "language": result.language,
+                            "confidence": result.confidence
+                        }))
+                
+                # 清理临时文件
+                import os
+                os.unlink(temp_file.name)
+                
+        except Exception as e:
+            logger.error(f"会话 {session.session_id} 音频转录错误: {e}")
+            await self._send_session_error(session, f"转录失败: {e}")
+    
+    async def _cleanup_session(self, session) -> None:
+        """清理会话资源"""
+        try:
+            # 停止会话专用任务
+            if session.session_id in self.audio_processor_tasks:
+                task = self.audio_processor_tasks[session.session_id]
+                if not task.done():
+                    task.cancel()
+                del self.audio_processor_tasks[session.session_id]
+            
+            if session.session_id in self.transcription_tasks:
+                task = self.transcription_tasks[session.session_id]
+                if not task.done():
+                    task.cancel()
+                del self.transcription_tasks[session.session_id]
+            
+            # 从连接管理器移除会话
+            self.connection_manager.remove_session(session.websocket)
+            
+            logger.info(f"会话 {session.session_id} 资源清理完成")
+            
+        except Exception as e:
+            logger.error(f"清理会话 {session.session_id} 资源时出错: {e}")
     
     async def _handle_audio_stream(self, websocket) -> None:
         """处理音频流数据"""

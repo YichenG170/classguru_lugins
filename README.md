@@ -146,7 +146,179 @@ print(response)
 
 **功能**: 处理课堂实时语音流，实现实时转录和可选翻译
 
-**特性**: WebSocket实时音频流处理、抖动缓冲区、自动翻译
+**特性**: WebSocket实时音频流处理、抖动缓冲区、自动翻译、多用户会话管理
+
+**架构增强**: 
+- ✅ **多连接支持**: 支持最多50个并发WebSocket连接
+- ✅ **会话隔离**: 每个连接拥有独立的音频缓冲区和状态
+- ✅ **连接管理**: 自动管理连接生命周期和资源清理
+- ✅ **独立配置**: 每个会话可以有不同的语言和翻译设置
+
+#### 🔄 连接流程
+
+**1. 客户端连接初始化**
+```javascript
+// 前端连接示例
+const ws = new WebSocket('ws://localhost:8765');
+
+ws.onopen = function() {
+    // 必须先发送初始化消息
+    ws.send(JSON.stringify({
+        type: 'init',
+        session_id: 'class_123_student_1',  // 可选，不提供会自动生成
+        language: 'en',                     // 音频语言
+        translate_to: 'zh',                 // 翻译目标语言（可选）
+        display_subtitles: true             // 是否显示字幕
+    }));
+};
+
+// 接收初始化确认
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    
+    if (data.type === 'init_response') {
+        console.log('连接成功:', {
+            session_id: data.session_id,
+            connection_id: data.connection_id,
+            server_version: data.server_version
+        });
+        
+        // 现在可以发送音频数据
+        startAudioStreaming();
+    }
+};
+```
+
+**2. 音频数据发送**
+```javascript
+function sendAudioData(audioBlob) {
+    // 直接发送二进制音频数据
+    ws.send(audioBlob);
+}
+
+// 接收转录结果
+ws.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    
+    switch(data.type) {
+        case 'ack':
+            // 音频帧确认
+            console.log(`帧 ${data.sequence} 已确认`);
+            break;
+            
+        case 'transcription':
+            // 转录结果
+            console.log('转录:', data.original_text);
+            if (data.translated_text) {
+                console.log('翻译:', data.translated_text);
+            }
+            break;
+            
+        case 'error':
+            console.error('错误:', data.message);
+            break;
+    }
+};
+```
+
+**3. 控制消息**
+```javascript
+// 启用/禁用翻译
+ws.send(JSON.stringify({
+    type: 'enable_translation',
+    enabled: true,
+    target_lang: 'zh'
+}));
+
+// 控制字幕显示
+ws.send(JSON.stringify({
+    type: 'start_display'  // 或 'stop_display'
+}));
+
+// 心跳检测
+ws.send(JSON.stringify({
+    type: 'ping'
+}));
+```
+
+#### 🏗️ 会话管理架构
+
+**连接管理器 (ConnectionManager)**
+- 管理最多50个并发连接
+- 每个连接分配唯一的connection_id
+- 自动清理断开的连接资源
+
+**用户会话 (UserSession)**
+- 每个会话拥有独立的：
+  - JitterBuffer（抖动缓冲区）
+  - AudioQueue（音频队列）
+  - 语言设置和翻译配置
+  - 统计信息和状态
+
+**资源隔离**
+```python
+# 每个会话的独立资源
+UserSession {
+    session_id: "class_123_student_1"
+    connection_id: "uuid-12345"
+    jitter_buffer: JitterBuffer()      # 独立缓冲区
+    audio_queue: Queue(maxsize=1000)   # 独立队列
+    language: "en"                     # 独立语言设置
+    translate_to: "zh"                 # 独立翻译设置
+    display_subtitles: true            # 独立显示设置
+    stats: ConnectionStats()           # 独立统计
+}
+```
+
+#### 🚀 启动多连接服务
+
+**服务器启动**
+```python
+from scripts.plugin2 import STTService
+import asyncio
+
+# 初始化服务（支持最多50个连接）
+stt_service = STTService(max_connections=50)
+
+# 启动WebSocket服务器
+async def start_service():
+    await stt_service.start_websocket_server(host="localhost", port=8765)
+    print("多连接STT服务器已启动")
+    
+    # 保持服务运行
+    await asyncio.Future()
+
+asyncio.run(start_service())
+```
+
+#### 🧪 测试多连接
+
+**运行测试脚本**
+```powershell
+# 1. 启动Plugin2服务器
+python scripts/plugin2.py
+
+# 2. 在另一个终端运行测试
+python test_multi_client.py
+```
+
+**测试内容**
+- ✅ 单客户端连接和音频发送
+- ✅ 5个客户端并发连接
+- ✅ 会话隔离验证（不同配置）
+- ✅ 连接断开和资源清理
+
+#### 📊 性能指标
+
+**并发能力**
+- 最大连接数：50个并发WebSocket连接
+- 每连接音频队列：1000帧缓冲
+- 每连接独立的OpenAI API调用
+
+**资源管理**
+- 自动连接超时：30秒初始化超时
+- 心跳检测：支持ping/pong机制
+- 资源清理：连接断开时自动清理所有相关资源
 
 **API请求体**:
 ```json
