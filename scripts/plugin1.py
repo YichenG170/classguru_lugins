@@ -147,9 +147,8 @@ class MaterialSvc:
             else:
                 raise ValueError("analyze操作需要file_path或content参数")
             
-            # 根据expect字段决定返回格式
-            expect = api_request.expect
-            result = self._format_result(course_profile, expect)
+            # 根据intent中的格式化参数决定返回格式
+            result = self._format_result(course_profile, intent)
             
             # 添加OpenAI file ID
             if openai_file_id:
@@ -160,23 +159,23 @@ class MaterialSvc:
         else:
             raise ValueError(f"不支持的操作: {action}")
     
-    def _format_result(self, course_profile: CourseProfile, expect: Dict[str, Any]) -> Dict[str, Any]:
-        """根据expect字段格式化返回结果"""
+    def _format_result(self, course_profile: CourseProfile, intent: Dict[str, Any]) -> Dict[str, Any]:
+        """根据intent字段格式化返回结果"""
         result = {}
         
         # 默认返回完整的课程画像
-        if expect.get("format") == "full" or not expect.get("fields"):
+        if intent.get("format") == "full" or not intent.get("fields"):
             result = asdict(course_profile)
         else:
             # 只返回指定字段
-            fields = expect.get("fields", [])
+            fields = intent.get("fields", [])
             profile_dict = asdict(course_profile)
             for field in fields:
                 if field in profile_dict:
                     result[field] = profile_dict[field]
         
         # 添加额外的元数据
-        if expect.get("include_metadata", False):
+        if intent.get("include_metadata", False):
             result["metadata"] = {
                 "generated_at": datetime.now().isoformat(),
                 "service_version": self.version,
@@ -473,12 +472,11 @@ def main():
             },
             "intent": {
                 "action": "analyze",
-                "file_path": "cgv1-2 2024.pdf"
-            },
-            "expect": {
+                "file_path": "cgv1-2 2024.pdf",
                 "format": "full",
                 "include_metadata": True
-            }
+            },
+            "expect": None
         }
         
         print("=== 请求体1 ===")
@@ -506,12 +504,11 @@ def demo_api_usage():
         },
         "intent": {
             "action": "analyze",
-            "file_path": "/path/to/document.pdf"
-        },
-        "expect": {
+            "file_path": "/path/to/document.pdf",
             "format": "full",
             "include_metadata": True
-        }
+        },
+        "expect": None
     }
     
     print("=== API请求示例模板 ===")

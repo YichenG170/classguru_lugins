@@ -134,9 +134,8 @@ class PartialSummSvc:
             # 生成总结
             summary = self.generate_summary(course_profile, transcript_text, session_id)
             
-            # 根据expect字段格式化返回结果
-            expect = api_request.expect
-            result = self._format_summary_result(summary, expect)
+            # 根据intent字段格式化返回结果
+            result = self._format_summary_result(summary, intent)
             
             return result
             
@@ -148,16 +147,15 @@ class PartialSummSvc:
             
             summaries = self._get_recent_summaries(session_id, limit, time_window)
             
-            expect = api_request.expect
-            result = self._format_summaries_list(summaries, expect)
+            result = self._format_summaries_list(summaries, intent)
             
             return result
             
         else:
             raise ValueError(f"不支持的操作: {action}")
     
-    def _format_summary_result(self, summary: PartialSummary, expect: Dict[str, Any]) -> Dict[str, Any]:
-        """根据expect字段格式化总结结果"""
+    def _format_summary_result(self, summary: PartialSummary, intent: Dict[str, Any]) -> Dict[str, Any]:
+        """根据intent字段格式化总结结果"""
         result = {
             "summary": {
                 "session_id": summary.session_id,
@@ -169,7 +167,7 @@ class PartialSummSvc:
         }
         
         # 添加元数据
-        if expect.get("include_metadata", False):
+        if intent.get("include_metadata", False):
             result["metadata"] = {
                 "service_version": self.version,
                 "generated_at": datetime.now().isoformat(),
@@ -179,7 +177,7 @@ class PartialSummSvc:
             }
         
         # 添加统计信息
-        if expect.get("include_statistics", False):
+        if intent.get("include_statistics", False):
             result["statistics"] = {
                 "markdown_sections": len([line for line in summary.markdown_content.split('\n') if line.startswith('#')]),
                 "key_concepts_count": summary.markdown_content.count('🔑'),
@@ -189,14 +187,14 @@ class PartialSummSvc:
         
         return result
     
-    def _format_summaries_list(self, summaries: List[Dict[str, Any]], expect: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_summaries_list(self, summaries: List[Dict[str, Any]], intent: Dict[str, Any]) -> Dict[str, Any]:
         """格式化总结列表"""
         result = {
             "summaries": summaries,
             "total_count": len(summaries)
         }
         
-        if expect.get("include_statistics", False):
+        if intent.get("include_statistics", False):
             total_words = sum(s.get("word_count", 0) for s in summaries)
             all_tags = []
             for s in summaries:

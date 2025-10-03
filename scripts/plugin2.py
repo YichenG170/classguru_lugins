@@ -376,17 +376,16 @@ class STTService:
             # 同步转录（简化版）
             transcription_result = self._transcribe_audio_sync(audio_bytes, language)
             
-            # 根据expect字段格式化返回结果
-            expect = api_request.expect
-            result = self._format_transcription_result(transcription_result, expect)
+            # 根据intent字段格式化返回结果
+            result = self._format_transcription_result(transcription_result, intent)
             
             return result
             
         else:
             raise ValueError(f"不支持的操作: {action}")
     
-    def _format_transcription_result(self, transcription_result: Dict[str, Any], expect: Dict[str, Any]) -> Dict[str, Any]:
-        """根据expect字段格式化转录结果"""
+    def _format_transcription_result(self, transcription_result: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+        """根据intent字段格式化转录结果"""
         result = {
             "timestamp": transcription_result["timestamp"],
             "subtitle": {
@@ -398,7 +397,7 @@ class STTService:
         }
         
         # 添加额外的元数据
-        if expect.get("include_metadata", False):
+        if intent.get("include_metadata", False):
             result["metadata"] = {
                 "service_version": self.version,
                 "processed_at": datetime.now().isoformat(),
@@ -408,7 +407,7 @@ class STTService:
             }
         
         # 添加技术细节
-        if expect.get("include_technical_details", False):
+        if intent.get("include_technical_details", False):
             result["technical_details"] = {
                 "audio_config": asdict(self.audio_config),
                 "model_used": "whisper-1",

@@ -164,9 +164,8 @@ class InClassChatSvc:
             # 生成AI回答
             chat_response = self._generate_ai_response(question, context, session_id)
             
-            # 根据expect字段格式化返回结果
-            expect = api_request.expect
-            result = self._format_chat_result(chat_response, expect)
+            # 根据intent字段格式化返回结果
+            result = self._format_chat_result(chat_response, intent)
             
             return result
             
@@ -236,8 +235,8 @@ class InClassChatSvc:
         except Exception as e:
             raise Exception(f"AI问答服务调用失败: {str(e)}")
     
-    def _format_chat_result(self, chat_response: ChatResponse, expect: Dict[str, Any]) -> Dict[str, Any]:
-        """根据expect字段格式化聊天结果"""
+    def _format_chat_result(self, chat_response: ChatResponse, intent: Dict[str, Any]) -> Dict[str, Any]:
+        """根据intent字段格式化聊天结果"""
         result = {
             "chat_response": {
                 "question": chat_response.question,
@@ -250,7 +249,7 @@ class InClassChatSvc:
         }
         
         # 添加元数据
-        if expect.get("include_metadata", False):
+        if intent.get("include_metadata", False):
             result["metadata"] = {
                 "service_version": self.version,
                 "model_used": chat_response.model_used,
@@ -260,7 +259,7 @@ class InClassChatSvc:
             }
         
         # 添加调试信息
-        if expect.get("include_debug", False):
+        if intent.get("include_debug", False):
             result["debug"] = {
                 "question_length": len(chat_response.question),
                 "confidence_breakdown": {

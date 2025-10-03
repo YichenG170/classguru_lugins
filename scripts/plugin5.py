@@ -122,9 +122,8 @@ class FinalReportSvc:
                 session_id=session_id
             )
             
-            # 根据expect字段格式化返回结果
-            expect = api_request.expect
-            result = self._format_report_result(final_report, expect)
+            # 根据intent字段格式化返回结果
+            result = self._format_report_result(final_report, intent)
             
             return result
             
@@ -176,8 +175,8 @@ class FinalReportSvc:
             source_summary=source_summary
         )
     
-    def _format_report_result(self, final_report: FinalReport, expect: Dict[str, Any]) -> Dict[str, Any]:
-        """根据expect字段格式化报告结果"""
+    def _format_report_result(self, final_report: FinalReport, intent: Dict[str, Any]) -> Dict[str, Any]:
+        """根据intent字段格式化报告结果"""
         result = {
             "final_report": {
                 "report_id": final_report.report_id,
@@ -190,7 +189,7 @@ class FinalReportSvc:
         }
         
         # 添加元数据
-        if expect.get("include_metadata", False):
+        if intent.get("include_metadata", False):
             result["metadata"] = {
                 "service_version": self.version,
                 "model_used": "gpt-4o-mini",
@@ -200,11 +199,11 @@ class FinalReportSvc:
             }
         
         # 添加源数据摘要
-        if expect.get("include_source_summary", False):
+        if intent.get("include_source_summary", False):
             result["source_summary"] = final_report.source_summary
         
         # 添加统计信息
-        if expect.get("include_statistics", False):
+        if intent.get("include_statistics", False):
             result["statistics"] = {
                 "content_breakdown": {
                     "level_1_items": final_report.markdown_content.count("## "),
@@ -458,13 +457,12 @@ def main():
                 "summaries_markdown": sample_summaries_markdown,
                 "user_dialog_text": sample_user_dialog_text,
                 "course_profile_json": sample_course_profile_json,
-                "session_id": "final_report_demo_session"
-            },
-            "expect": {
+                "session_id": "final_report_demo_session",
                 "include_metadata": True,
                 "include_source_summary": True,
                 "include_statistics": True
-            }
+            },
+            "expect": None
         }
         
         print("=== 请求体 (生成课后总结报告) ===")

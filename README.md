@@ -84,12 +84,11 @@ $env:OPENAI_API_KEY='your_openai_api_key_here'
   },
   "intent": {
     "action": "analyze",
-    "file_path": "/path/to/document.pdf"
-  },
-  "expect": {
+    "file_path": "/path/to/document.pdf",
     "format": "full",
     "include_metadata": true
-  }
+  },
+  "expect": null
 }
 ```
 
@@ -336,12 +335,11 @@ python test_multi_client.py
     "action": "transcribe_audio",
     "audio_data": "base64_encoded_audio",
     "language": "en",
-    "translate_to": "zh"
-  },
-  "expect": {
+    "translate_to": "zh",
     "include_translation": true,
     "include_confidence": true
-  }
+  },
+  "expect": null
 }
 ```
 
@@ -421,12 +419,11 @@ asyncio.run(start_service())
       "learning_objectives": ["目标1", "目标2"]
     },
     "transcript_text": "转录文本内容...",
-    "session_id": "session_123"
-  },
-  "expect": {
+    "session_id": "session_123",
     "include_metadata": true,
     "include_statistics": true
-  }
+  },
+  "expect": null
 }
 ```
 
@@ -505,12 +502,11 @@ print(response)
       "main_title": "课程标题",
       "keywords": ["关键词1", "关键词2"]
     },
-    "session_id": "可选的会话ID"
-  },
-  "expect": {
+    "session_id": "可选的会话ID",
     "include_metadata": true,
     "include_debug": false
-  }
+  },
+  "expect": null
 }
 ```
 
@@ -587,13 +583,12 @@ print(response)
     "summaries_markdown": "# 总结1\n## 要点\n...",
     "user_dialog_text": "用户对话记录...",
     "course_profile_json": "{\"main_title\": \"课程\", ...}",
-    "session_id": "session_123"
-  },
-  "expect": {
+    "session_id": "session_123",
     "include_metadata": true,
     "include_source_summary": true,
     "include_statistics": true
-  }
+  },
+  "expect": null
 }
 ```
 
@@ -677,12 +672,11 @@ print(response)
     "action": "ask_question",
     "user_question": "用户的问题文本",
     "final_report_md": "# 最终总结报告\n\n## 关键知识点\n...",
-    "session_id": "可选的会话ID"
-  },
-  "expect": {
+    "session_id": "可选的会话ID",
     "include_metadata": true,
     "include_analysis": true
-  }
+  },
+  "expect": null
 }
 ```
 

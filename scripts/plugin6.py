@@ -112,9 +112,8 @@ class PostClassChatSvc:
             # 生成问答回复
             chat_response = self._generate_answer(user_question, final_report_md, session_id)
             
-            # 根据expect字段格式化返回结果
-            expect = api_request.expect
-            result = self._format_chat_result(chat_response, expect)
+            # 根据intent字段格式化返回结果
+            result = self._format_chat_result(chat_response, intent)
             
             return result
             
@@ -139,8 +138,8 @@ class PostClassChatSvc:
             context_used=bool(final_report_md)
         )
     
-    def _format_chat_result(self, chat_response: PostClassChatResponse, expect: Dict[str, Any]) -> Dict[str, Any]:
-        """根据expect字段格式化问答结果"""
+    def _format_chat_result(self, chat_response: PostClassChatResponse, intent: Dict[str, Any]) -> Dict[str, Any]:
+        """根据intent字段格式化问答结果"""
         result = {
             "post_class_chat": {
                 "question": chat_response.question,
@@ -152,7 +151,7 @@ class PostClassChatSvc:
         }
         
         # 添加元数据
-        if expect.get("include_metadata", False):
+        if intent.get("include_metadata", False):
             result["metadata"] = {
                 "service_version": self.version,
                 "model_used": chat_response.model_used,
@@ -162,7 +161,7 @@ class PostClassChatSvc:
             }
         
         # 添加分析信息
-        if expect.get("include_analysis", False):
+        if intent.get("include_analysis", False):
             result["analysis"] = {
                 "question_type": self._analyze_question_type(chat_response.question),
                 "answer_confidence": self._estimate_answer_confidence(chat_response.answer),
@@ -315,12 +314,11 @@ if __name__ == "__main__":
                 "action": "ask_question",
                 "user_question": "什么是极坐标系？它与笛卡尔坐标系有什么区别？",
                 "final_report_md": sample_final_report,
-                "session_id": "demo_post_chat_session"
-            },
-            "expect": {
+                "session_id": "demo_post_chat_session",
                 "include_metadata": True,
                 "include_analysis": True
-            }
+            },
+            "expect": None
         }
         
         print("=== 请求体1 (课后问答) ===")
@@ -345,12 +343,11 @@ if __name__ == "__main__":
             "intent": {
                 "action": "ask_question",
                 "user_question": "极坐标转换为笛卡尔坐标的公式是什么？请解释一下。",
-                "final_report_md": sample_final_report
-            },
-            "expect": {
+                "final_report_md": sample_final_report,
                 "include_metadata": False,
                 "include_analysis": True
-            }
+            },
+            "expect": None
         }
         
         print("\n=== 请求体2 (公式问答) ===")
@@ -387,12 +384,11 @@ def demo_api_usage():
             "action": "ask_question",
             "user_question": "用户的问题文本",
             "final_report_md": "# 最终总结报告\n\n## 关键知识点\n- 知识点1\n- 知识点2\n\n## 详细内容\n...",
-            "session_id": "可选的会话ID"
-        },
-        "expect": {
+            "session_id": "可选的会话ID",
             "include_metadata": True,
             "include_analysis": True
-        }
+        },
+        "expect": None
     }
     
     print("=== API请求示例模板 ===")
