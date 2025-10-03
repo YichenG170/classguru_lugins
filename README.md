@@ -93,6 +93,43 @@ $env:OPENAI_API_KEY='your_openai_api_key_here'
 }
 ```
 
+**API返回体**:
+```json
+{
+  "request_id": "unique_request_id",
+  "result": {
+    "main_title": "课程主标题",
+    "subtitle": "课程副标题",
+    "introduction": "课程简介",
+    "keywords": ["关键词1", "关键词2", "关键词3"],
+    "outline": ["主题1", "主题2", "主题3"],
+    "abbreviations": {
+      "AI": "Artificial Intelligence",
+      "ML": "Machine Learning"
+    },
+    "formulas_symbols": [
+      {
+        "symbol": "x",
+        "description": "X坐标分量"
+      }
+    ],
+    "proper_nouns_cases": ["专有名词1", "案例1"],
+    "learning_objectives": ["学习目标1", "学习目标2"],
+    "openai_file_id": "file-xxxxxxxxxxxxx",
+    "metadata": {
+      "generated_at": "2025-10-04T12:00:00Z",
+      "service_version": "1.0.0",
+      "total_keywords": 45,
+      "total_outline_items": 10
+    }
+  },
+  "info": {
+    "status_code": 200,
+    "description": "处理成功"
+  }
+}
+```
+
 **使用方法**:
 ```python
 from scripts.plugin1 import MaterialSvc
@@ -132,6 +169,42 @@ print(response)
   "expect": {
     "include_translation": true,
     "include_confidence": true
+  }
+}
+```
+
+**API返回体**:
+```json
+{
+  "request_id": "unique_request_id",
+  "result": {
+    "timestamp": "2025-10-04T12:00:00Z",
+    "subtitle": {
+      "original": "原始转录文本",
+      "translated": "翻译后文本"
+    },
+    "language": "en",
+    "confidence": 0.95,
+    "metadata": {
+      "service_version": "1.0.0",
+      "processed_at": "2025-10-04T12:00:00Z",
+      "audio_duration": 2.5,
+      "translation_enabled": true,
+      "target_language": "zh"
+    },
+    "technical_details": {
+      "audio_config": {
+        "sample_rate": 16000,
+        "channels": 1,
+        "encoding": "opus"
+      },
+      "model_used": "whisper-1",
+      "processing_time": 0.8
+    }
+  },
+  "info": {
+    "status_code": 200,
+    "description": "处理成功"
   }
 }
 ```
@@ -181,6 +254,39 @@ asyncio.run(start_service())
   "expect": {
     "include_metadata": true,
     "include_statistics": true
+  }
+}
+```
+
+**API返回体**:
+```json
+{
+  "request_id": "unique_request_id",
+  "result": {
+    "summary": {
+      "session_id": "session_123",
+      "timestamp": "2025-10-04T12:00:00Z",
+      "markdown_content": "## 📚 本段要点\n- 要点1\n- 要点2\n\n## 🔑 关键概念\n- **概念1**: 说明\n- **概念2**: 说明\n\n## 💡 重要提醒\n- 注意事项\n\n标签：#概念1 #概念2",
+      "word_count": 156,
+      "course_tags": ["概念1", "概念2", "重点"]
+    },
+    "metadata": {
+      "service_version": "1.0.0",
+      "generated_at": "2025-10-04T12:00:00Z",
+      "model_used": "gpt-4o-mini",
+      "content_length": 280,
+      "tag_count": 3
+    },
+    "statistics": {
+      "markdown_sections": 3,
+      "key_concepts_count": 2,
+      "important_points_count": 2,
+      "reminders_count": 1
+    }
+  },
+  "info": {
+    "status_code": 200,
+    "description": "处理成功"
   }
 }
 ```
@@ -236,6 +342,45 @@ print(response)
 }
 ```
 
+**API返回体**:
+```json
+{
+  "request_id": "unique_request_id",
+  "result": {
+    "chat_response": {
+      "question": "用户的问题文本",
+      "answer": "基于课堂上下文的AI回答",
+      "session_id": "session_123",
+      "timestamp": "2025-10-04T12:00:00Z",
+      "confidence_score": 0.85,
+      "context_sources": ["最近转录内容", "阶段性总结"]
+    },
+    "metadata": {
+      "service_version": "1.0.0",
+      "model_used": "gpt-4o-mini",
+      "response_generated_at": "2025-10-04T12:00:00Z",
+      "answer_length": 128,
+      "sources_count": 2
+    },
+    "debug": {
+      "question_length": 15,
+      "confidence_breakdown": {
+        "base_score": 0.5,
+        "adjustments": "基于上下文质量和关键词匹配"
+      },
+      "context_summary": {
+        "transcripts_count": 1,
+        "summaries_count": 1
+      }
+    }
+  },
+  "info": {
+    "status_code": 200,
+    "description": "处理成功"
+  }
+}
+```
+
 **使用方法**:
 ```python
 from scripts.plugin4 import InClassChatSvc
@@ -280,6 +425,54 @@ print(response)
 }
 ```
 
+**API返回体**:
+```json
+{
+  "request_id": "unique_request_id",
+  "result": {
+    "final_report": {
+      "report_id": "report_uuid_12345",
+      "session_id": "session_123",
+      "generated_at": "2025-10-04T12:00:00Z",
+      "markdown_content": "# 课后总结报告\n\n## 1. 关键知识点\n- 知识点1\n- 知识点2\n\n## 2. 每个知识点的细节\n### 知识点1\n- 细节1\n- 细节2\n\n## 3. 对细节的扩展说明/解释\n### 知识点1 - 细节1\n- 扩展解释1\n- 扩展解释2",
+      "word_count": 450,
+      "section_count": 5
+    },
+    "metadata": {
+      "service_version": "1.0.0",
+      "model_used": "gpt-4o-mini",
+      "generation_timestamp": "2025-10-04T12:00:00Z",
+      "content_length": 1200,
+      "processing_summary": "Three-tier structured final report generated"
+    },
+    "source_summary": {
+      "transcript_length": 5000,
+      "summaries_length": 800,
+      "dialog_length": 300,
+      "course_title": "Introduction to Computer Graphics",
+      "keywords_count": 25,
+      "objectives_count": 3
+    },
+    "statistics": {
+      "content_breakdown": {
+        "level_1_items": 3,
+        "level_2_items": 2,
+        "level_3_items": 1
+      },
+      "formatting_elements": {
+        "bold_items": 8,
+        "bullet_points": 12,
+        "numbered_lists": 6
+      }
+    }
+  },
+  "info": {
+    "status_code": 200,
+    "description": "处理成功"
+  }
+}
+```
+
 **使用方法**:
 ```python
 from scripts.plugin5 import FinalReportSvc
@@ -317,6 +510,39 @@ print(response)
   "expect": {
     "include_metadata": true,
     "include_analysis": true
+  }
+}
+```
+
+**API返回体**:
+```json
+{
+  "request_id": "unique_request_id",
+  "result": {
+    "post_class_chat": {
+      "question": "用户的问题文本",
+      "answer": "基于最终报告的AI回答",
+      "session_id": "session_123",
+      "timestamp": "2025-10-04T12:00:00Z",
+      "answer_length": 256
+    },
+    "metadata": {
+      "service_version": "1.0.0",
+      "model_used": "gpt-4o-mini",
+      "response_generated_at": "2025-10-04T12:00:00Z",
+      "context_used": true,
+      "question_length": 20
+    },
+    "analysis": {
+      "question_type": "definition",
+      "answer_confidence": "high",
+      "context_relevance": "high",
+      "response_completeness": "complete"
+    }
+  },
+  "info": {
+    "status_code": 200,
+    "description": "处理成功"
   }
 }
 ```
