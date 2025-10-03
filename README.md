@@ -28,7 +28,13 @@ ClassGuru/
 
 本项目使用 Python 3.12 虚拟环境来管理依赖包。
 
-#### 1. 激活虚拟环境
+#### 1. 创建虚拟环境
+
+```powershell
+python -m venv plugin_env
+```
+
+#### 2. 激活虚拟环境
 
 ```powershell
 .\plugin_env\Scripts\Activate.ps1
@@ -36,13 +42,13 @@ ClassGuru/
 
 激活成功后，命令提示符前会显示 `(plugin_env)` 标识。
 
-#### 2. 安装依赖
+#### 3. 安装依赖
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-#### 3. 停用虚拟环境
+#### 4. 停用虚拟环境
 
 ```powershell
 deactivate
